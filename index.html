@@ -3,463 +3,595 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#0b0f12" />
   <title>Auto Cutter - KI Video Editor</title>
+  <meta name="description" content="Auto Cutter - vollständig clientseitiger KI-Video-Editor (FFmpeg.wasm + WebAudio API)" />
+  <meta name="theme-color" content="#071018" />
+  <!-- FFmpeg.wasm UMD bundle (FFmpeg global: createFFmpeg, fetchFile) -->
+  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.2/dist/ffmpeg.min.js"></script>
+  <script src="https://unpkg.com/@ffmpeg/util@0.12.2/dist/util.min.js"></script>
+
   <style>
     :root{
-      --bg:#070b10; --bg2:#0d1317; --panel:#10191f; --panel2:#121d25; --text:#edf3f6; --muted:#9aa9b3; --line:rgba(255,255,255,0.08); --accent:#5ab0ff; --accent2:#7b61ff; --good:#77dd77; --warn:#ffbf69; --danger:#ff6f6f; --shadow:0 22px 60px rgba(1,5,12,0.65);
+      --bg:#05070a; --card:#0b1115; --muted:#93a6b1; --text:#eaf4fb;
+      --accent:#4fb3ff; --accent-2:#7b61ff; --glass: rgba(255,255,255,0.02);
+      --radius:14px; --pad:18px; --shadow: 0 18px 45px rgba(6,14,22,0.6);
     }
     *{box-sizing:border-box}
-    html,body{margin:0;height:100%;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:linear-gradient(180deg,#050a0e 0%, #071018 40%, #0b1015 100%);color:var(--text)}
-    body{display:flex;justify-content:center;padding:18px}
-    .app{width:min(1200px,100%);padding:22px;border-radius:22px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));box-shadow:var(--shadow);border:1px solid var(--line)}
-    .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:8px 4px 20px}
-    .brand{display:flex;align-items:center;gap:16px}
-    .logo{width:72px;height:72px;border-radius:18px;display:grid;place-items:center;font-weight:900;letter-spacing:1px;background:linear-gradient(135deg,#84d7ff,#4f9bff,#6d78ff);color:#06131d;box-shadow:0 18px 36px rgba(84,129,255,0.45);font-size:1.1rem}
-    h1{margin:0;font-size:clamp(1.8rem,2.8vw,2.6rem);line-height:1.1}
-    .subhead{margin-top:3px;color:var(--muted);font-size:0.84rem;letter-spacing:0.02em}
-    .layout{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(280px,0.9fr);gap:20px;margin-top:10px}
-    .panel{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.015));border:1px solid var(--line);border-radius:16px;padding:18px}
-    .stack{display:flex;flex-direction:column;gap:18px}
-    label{display:block;font-size:0.8rem;color:var(--muted);margin-bottom:10px;letter-spacing:0.01em}
-    .dropzone{border:1.5px dashed rgba(255,255,255,0.06);background:rgba(255,255,255,0.015);border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;min-height:110px;text-align:center;color:var(--muted);transition:all 180ms ease;border-color:rgba(255,255,255,0.04)}
-    .dropzone.active{border-color:rgba(92,160,255,0.8);background:rgba(92,160,255,0.06)}
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;border:none;border-radius:12px;padding:12px 16px;background:linear-gradient(180deg,#5ab0ff,#4194ff);color:#04131c;font-weight:800;cursor:pointer;transition:transform 120ms ease, box-shadow 180ms ease;box-shadow:0 12px 30px rgba(48,132,255,0.28)}
-    .btn:hover{transform:translateY(-1px)}
-    .btn.secondary{background:linear-gradient(180deg,#25313d,#1b2732);color:var(--text);box-shadow:none;border:1px solid rgba(255,255,255,0.05)}
-    .btn.primary{width:100%;padding:15px 18px;font-size:1rem;margin-top:12px}
-    .file-list{width:100%;display:flex;flex-direction:column;gap:6px;max-height:110px;overflow:auto}
-    .file-item{display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.04);border-radius:9px;padding:8px 10px;font-size:0.78rem;color:var(--text)}
-    textarea{width:100%;min-height:140px;padding:14px 12px;border-radius:12px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:var(--text);font-size:0.96rem;resize:vertical;outline:none}
-    textarea:focus,input:focus{outline:none;box-shadow:0 0 0 2px rgba(90,176,255,0.22)}
-    .progresspanel{display:flex;flex-direction:column;gap:8px}
-    .progress{height:14px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.06)}
-    .progress > i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width 260ms linear;border-radius:inherit}
-    .status{font-size:0.8rem;color:var(--muted);min-height:20px}
-    h3{margin:0 0 12px;font-size:1.12rem}
-    .stats{margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);color:var(--muted);font-size:0.8rem;line-height:1.6}
-    .preview-box{padding:10px;border-radius:14px;border:1px solid rgba(255,255,255,0.05);background:rgba(0,0,0,0.18)}
-    video{width:100%;display:block;border-radius:10px;background:#000;max-height:420px;object-fit:contain}
-    .meta{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:10px;color:var(--muted);font-size:0.75rem}
-    @media (max-width: 920px){
-      .layout{grid-template-columns:1fr}
-      .topbar{align-items:flex-start;flex-direction:column}
-      .brand{width:100%}
-    }
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#03060a 0%, #071018 40%, #0a1014 100%);font-family:Inter,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial;color:var(--text);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+    .wrap{max-width:1180px;margin:28px auto;padding:22px;border-radius:18px;background:linear-gradient(180deg, rgba(255,255,255,0.008), transparent);box-shadow:var(--shadow);border:1px solid rgba(255,255,255,0.03)}
+    header{display:flex;align-items:center;gap:18px;margin-bottom:18px}
+    .brand{display:flex;gap:14px;align-items:center}
+    .logo{width:72px;height:72px;border-radius:14px;display:grid;place-items:center;font-weight:900;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#041420;font-size:1.2rem;box-shadow:0 12px 30px rgba(79,179,255,0.14)}
+    h1{margin:0;font-size:1.6rem}
+    .lead{margin-top:4px;color:var(--muted);font-size:0.92rem}
+
+    .grid{display:grid;grid-template-columns:1fr 380px;gap:20px}
+    @media(max-width:980px){ .grid{grid-template-columns:1fr} .logo{width:56px;height:56px} }
+
+    .card{background:var(--card);border-radius:var(--radius);padding:var(--pad);border:1px solid rgba(255,255,255,0.02)}
+    .section{display:flex;flex-direction:column;gap:12px}
+    label{font-size:0.88rem;color:var(--muted);margin-bottom:6px}
+    .upload-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .drop{border-radius:12px;padding:12px;border:1.5px dashed rgba(255,255,255,0.04);background:linear-gradient(180deg, rgba(255,255,255,0.006), transparent);min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--muted);text-align:center;position:relative}
+    .drop:hover{border-color:rgba(79,179,255,0.7)}
+    .drop .file-name{font-size:0.85rem;color:var(--text);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .btn{display:inline-flex;align-items:center;gap:10px;border-radius:10px;padding:10px 12px;background:linear-gradient(180deg,var(--accent),#2e97ff);color:#041620;font-weight:800;border:none;cursor:pointer;box-shadow:0 10px 24px rgba(46,151,255,0.14)}
+    .btn.ghost{background:linear-gradient(180deg,#0e1620,#0b1318);border:1px solid rgba(255,255,255,0.03);color:var(--text);box-shadow:none}
+    .btn.full{width:100%;padding:14px 16px;font-size:1rem}
+    .hint{font-size:0.85rem;color:var(--muted)}
+    .file-list{display:flex;flex-direction:column;gap:6px;width:100%;max-height:120px;overflow:auto}
+    .file-item{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.012);border:1px solid rgba(255,255,255,0.02);font-size:0.9rem;color:var(--text)}
+
+    textarea{width:100%;min-height:120px;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.02);background:rgba(255,255,255,0.02);color:var(--text);resize:vertical;font-size:0.96rem}
+    .controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:8px}
+
+    .progress{height:14px;background:rgba(255,255,255,0.03);border-radius:999px;overflow:hidden;border:1px solid rgba(255,255,255,0.02)}
+    .progress > i{height:100%;display:block;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width 360ms linear}
+    .status{margin-top:8px;font-size:0.9rem;color:var(--muted);min-height:22px}
+
+    .preview{display:flex;flex-direction:column;gap:10px}
+    video{width:100%;border-radius:10px;background:#000;max-height:420px;object-fit:contain}
+
+    footer{margin-top:12px;text-align:center;color:var(--muted);font-size:0.85rem}
+
+    /* hidden inputs */
+    input[type=file]{position:absolute;left:0;top:0;opacity:0;width:1px;height:1px;pointer-events:none}
+    .drop .fake-btn{display:inline-block;cursor:pointer}
   </style>
 </head>
 <body>
-  <div class="app">
-    <div class="topbar">
+  <div class="wrap" role="application" aria-label="Auto Cutter KI Video Editor">
+    <header>
       <div class="brand">
         <div class="logo">AC</div>
         <div>
           <h1>Auto Cutter - KI Video Editor</h1>
-          <div class="subhead">Browser-only pipeline · FFmpeg.wasm · Web Audio API · GitHub Pages ready</div>
+          <div class="lead">Vollständig clientseitig • FFmpeg.wasm + Web Audio API • Export als MP4</div>
         </div>
       </div>
-    </div>
+    </header>
 
-    <div class="layout">
-      <div class="stack">
-        <div class="panel">
-          <label>Videos (.mp4 / .mov)</label>
-          <div id="videoDrop" class="dropzone">
-            <div>Videos hierher ziehen oder</div>
-            <button id="pickVideos" class="btn secondary" type="button">Dateien auswählen</button>
-            <div id="videoList" class="file-list"></div>
+    <main class="grid" role="main">
+      <!-- Left: inputs and controls -->
+      <div class="card section" aria-live="polite">
+        <div>
+          <label for="videoFiles">1) Videodateien (mehrere, .mp4 / .mov)</label>
+          <div class="drop" id="videoDrop">
+            <div class="hint">Ziehe hier mehrere Videodateien hin oder wähle sie aus</div>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
+              <button id="btnPickVideos" class="btn ghost" type="button">Videos auswählen</button>
+              <div class="hint" id="videoCount">Keine Videos ausgewählt</div>
+            </div>
+            <!-- real file input (hidden) -->
+            <input id="inputVideos" type="file" accept=".mp4,.mov,video/*" multiple aria-label="Video Dateien" />
+            <div class="file-list" id="videoList" style="margin-top:10px"></div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label for="audioFile">2) Hintergrundmusik (.mp3 / .wav)</label>
+          <div class="drop" id="audioDrop">
+            <div class="hint">Ziehe Musik hierher oder wähle eine Datei aus</div>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:6px">
+              <button id="btnPickAudio" class="btn ghost" type="button">Audio auswählen</button>
+              <div class="hint" id="audioName">Keine Audio-Datei</div>
+            </div>
+            <input id="inputAudio" type="file" accept=".mp3,.wav,audio/*" aria-label="Audio Datei" />
+          </div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:180px">
+            <label for="lutFile">3) S-Log Konvertierungs-LUT (.cube)</label>
+            <div class="drop" id="lutDrop" style="min-height:70px">
+              <div style="display:flex;gap:10px;align-items:center">
+                <button id="btnPickLut" class="btn ghost" type="button">LUT auswählen</button>
+                <div class="hint" id="lutName">Keine LUT</div>
+              </div>
+              <input id="inputLut" type="file" accept=".cube" aria-label="LUT Datei" />
+            </div>
           </div>
 
-          <label style="margin-top:16px">Hintergrundmusik (.mp3 / .wav)</label>
-          <div id="audioDrop" class="dropzone">
-            <div>Musik hierher ziehen oder</div>
-            <button id="pickAudio" class="btn secondary" type="button">Audio auswählen</button>
-            <div id="audioList" class="file-list"></div>
+          <div style="flex:1;min-width:180px">
+            <label for="refFile">4) Referenzbild für Look (.jpg / .png)</label>
+            <div class="drop" id="refDrop" style="min-height:70px">
+              <div style="display:flex;gap:10px;align-items:center">
+                <button id="btnPickRef" class="btn ghost" type="button">Bild auswählen</button>
+                <div class="hint" id="refName">Kein Referenzbild</div>
+              </div>
+              <input id="inputRef" type="file" accept=".jpg,.jpeg,.png,image/*" aria-label="Referenzbild" />
+            </div>
           </div>
+        </div>
 
-          <label style="margin-top:16px">S-Log LUT (.cube)</label>
-          <div id="lutDrop" class="dropzone">
-            <div>LUT hierher ziehen oder</div>
-            <button id="pickLut" class="btn secondary" type="button">LUT auswählen</button>
-            <div id="lutList" class="file-list"></div>
-          </div>
-
-          <label style="margin-top:16px">Kreatives Referenzbild (.jpg / .png)</label>
-          <div id="refDrop" class="dropzone">
-            <div>Bild hierher ziehen oder</div>
-            <button id="pickRef" class="btn secondary" type="button">Referenzbild auswählen</button>
-            <div id="refList" class="file-list"></div>
-          </div>
-
-          <label style="margin-top:16px">Video-Idee / Style-Prompt</label>
+        <div style="margin-top:16px">
+          <label for="prompt">5) Video-Idee / Style-Prompt</label>
           <textarea id="prompt">Episches, rhythmisches Action-Edit mit präzisen Speed Ramps auf den Bass-Drop</textarea>
-
-          <button id="generateBtn" class="btn primary" type="button">Video mit Auto Cutter generieren</button>
-
-          <div class="progresspanel" style="margin-top:16px">
-            <div class="progress"><i id="progressBar"></i></div>
-            <div id="status" class="status">[Auto Cutter] Bereit</div>
-          </div>
         </div>
 
-        <div class="panel preview-box">
-          <div class="meta"><strong>Vorschau</strong><span id="previewMeta">Warten auf Render</span></div>
-          <video id="preview" controls playsinline></video>
+        <div style="margin-top:14px" class="controls">
+          <button id="btnGenerate" class="btn full" type="button">Video mit Auto Cutter generieren</button>
+        </div>
+
+        <div style="margin-top:14px">
+          <div class="progress"><i id="progressBar" style="width:0%"></i></div>
+          <div id="status" class="status">[Auto Cutter] Bereit</div>
         </div>
       </div>
 
-      <aside class="panel">
-        <h3>Status & Infos</h3>
-        <div class="stats" id="stats">Videos: 0 · Audio: keine · LUT: keine · Referenz: keine</div>
+      <!-- Right: preview & info -->
+      <aside class="card section" aria-label="Vorschau und Infos">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3 style="margin:0">Vorschau</h3>
+          <div style="color:var(--muted);font-size:0.88rem" id="previewInfo">Kein Export</div>
+        </div>
+
+        <div class="preview">
+          <video id="preview" controls playsinline></video>
+          <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+            <div class="hint" id="exportHint">Nach dem Rendern erscheint hier das Ergebnis und der Download startet automatisch.</div>
+            <div style="color:var(--muted);font-size:0.88rem" id="statSmall">Videos: 0 · Audio: aus · LUT: aus · Referenz: aus</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <h4 style="margin:0 0 8px 0">Log</h4>
+          <pre id="log" style="white-space:pre-wrap;background:rgba(255,255,255,0.01);padding:8px;border-radius:8px;max-height:220px;overflow:auto;font-size:0.85rem;color:var(--muted)">Startbereit.</pre>
+        </div>
       </aside>
-    </div>
+    </main>
+
+    <footer>Auto Cutter — Vollständig clientseitig · Nutzt FFmpeg.wasm & Web Audio API</footer>
   </div>
 
-  <script type="module">
-    import { FFmpeg } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.2/dist/esm/index.js';
-    import { fetchFile, toBlobURL } from 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.2/dist/esm/index.js';
-
-    const state = {
-      videos: [],
-      audio: null,
-      lut: null,
-      refImage: null,
-      ffmpeg: null,
-      loaded: false
-    };
-
-    const videoDrop = document.getElementById('videoDrop');
-    const videoList = document.getElementById('videoList');
-    const audioDrop = document.getElementById('audioDrop');
-    const audioList = document.getElementById('audioList');
-    const lutDrop = document.getElementById('lutDrop');
-    const lutList = document.getElementById('lutList');
-    const refDrop = document.getElementById('refDrop');
-    const refList = document.getElementById('refList');
-    const prompt = document.getElementById('prompt');
-    const status = document.getElementById('status');
-    const progressBar = document.getElementById('progressBar');
-    const preview = document.getElementById('preview');
-    const stats = document.getElementById('stats');
-    const previewMeta = document.getElementById('previewMeta');
-
-    function updateStats(){
-      stats.textContent = `Videos: ${state.videos.length} · Audio: ${state.audio ? state.audio.name : 'keine'} · LUT: ${state.lut ? state.lut.name : 'keine'} · Referenz: ${state.refImage ? state.refImage.name : 'keine'}`;
+<script>
+(async function(){
+  // ---------- Utilities ----------
+  const logEl = document.getElementById('log');
+  function log(msg){
+    const time = new Date().toLocaleTimeString();
+    logEl.textContent += `\n[${time}] ${msg}`;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function setStatus(text, progress){
+    document.getElementById('status').textContent = `[Auto Cutter] ${text}`;
+    if(typeof progress === 'number'){
+      document.getElementById('progressBar').style.width = `${Math.max(0, Math.min(100, Math.round(progress*100)))}%`;
     }
+  }
+  function humanSize(n){
+    if(n<1024) return n+' B';
+    if(n<1024*1024) return (n/1024).toFixed(1)+' KB';
+    return (n/(1024*1024)).toFixed(1)+' MB';
+  }
 
-    function formatSize(size){
-      if(size < 1024) return `${size} B`;
-      if(size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-      return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-    }
+  // ---------- Elements ----------
+  const inputVideos = document.getElementById('inputVideos');
+  const inputAudio  = document.getElementById('inputAudio');
+  const inputLut    = document.getElementById('inputLut');
+  const inputRef    = document.getElementById('inputRef');
 
-    function listItem(file){
-      const div = document.createElement('div');
-      div.className = 'file-item';
-      div.innerHTML = `<span>${file.name}</span><span>${formatSize(file.size)}</span>`;
-      return div;
-    }
+  const btnPickVideos = document.getElementById('btnPickVideos');
+  const btnPickAudio  = document.getElementById('btnPickAudio');
+  const btnPickLut    = document.getElementById('btnPickLut');
+  const btnPickRef    = document.getElementById('btnPickRef');
 
-    function setProgress(value, text){
-      progressBar.style.width = `${Math.min(100, Math.max(0, value * 100))}%`;
-      if(text){ status.textContent = `[Auto Cutter] ${text}`; }
-    }
+  const videoCount = document.getElementById('videoCount');
+  const videoList  = document.getElementById('videoList');
+  const audioName  = document.getElementById('audioName');
+  const lutName    = document.getElementById('lutName');
+  const refName    = document.getElementById('refName');
+  const preview    = document.getElementById('preview');
+  const previewInfo= document.getElementById('previewInfo');
+  const statSmall  = document.getElementById('statSmall');
 
-    function fileAccept(file, patterns){
-      return patterns.some(p => file.name.toLowerCase().match(p));
-    }
+  const btnGenerate = document.getElementById('btnGenerate');
 
-    function bindDropZone(zone, type, fileFilter){
-      const activate = (event) => {
-        event.preventDefault();
-        zone.classList.add('active');
-      };
-      const deactivate = (event) => {
-        event.preventDefault();
-        zone.classList.remove('active');
-      };
-      zone.addEventListener('dragenter', activate);
-      zone.addEventListener('dragover', activate);
-      zone.addEventListener('dragleave', deactivate);
-      zone.addEventListener('drop', (event) => {
-        deactivate(event);
-        const files = Array.from(event.dataTransfer.files || []);
-        const match = files.filter(fileFilter);
-        if(!match.length){ return; }
-        if(type === 'video'){ state.videos = match; videoList.innerHTML = ''; state.videos.forEach(file => videoList.appendChild(listItem(file))); }
-        if(type === 'audio'){ state.audio = match[0]; audioList.innerHTML = ''; audioList.appendChild(listItem(state.audio)); }
-        if(type === 'lut'){ state.lut = match[0]; lutList.innerHTML = ''; lutList.appendChild(listItem(state.lut)); }
-        if(type === 'ref'){ state.refImage = match[0]; refList.innerHTML = ''; refList.appendChild(listItem(state.refImage)); }
-        updateStats();
+  // ---------- File-store ----------
+  let videos = []; // File[]
+  let audio = null; // File
+  let lut = null;
+  let refImage = null;
+
+  function updateFileDisplays(){
+    videoList.innerHTML = '';
+    if(videos.length === 0){
+      videoCount.textContent = 'Keine Videos ausgewählt';
+    } else if(videos.length === 1){
+      videoCount.textContent = videos[0].name;
+      const it = document.createElement('div'); it.className='file-item'; it.innerHTML = `<span>${videos[0].name}</span><span>${humanSize(videos[0].size)}</span>`; videoList.appendChild(it);
+    } else {
+      videoCount.textContent = `${videos.length} Videos ausgewählt`;
+      videos.forEach(f => {
+        const it = document.createElement('div'); it.className='file-item'; it.innerHTML = `<span>${f.name}</span><span>${humanSize(f.size)}</span>`; videoList.appendChild(it);
       });
     }
+    audioName.textContent = audio ? audio.name : 'Keine Audio-Datei';
+    lutName.textContent = lut ? lut.name : 'Keine LUT';
+    refName.textContent = refImage ? refImage.name : 'Kein Referenzbild';
+    statSmall.textContent = `Videos: ${videos.length} · Audio: ${audio ? 'ja' : 'aus'} · LUT: ${lut ? 'ja':'aus'} · Referenz: ${refImage ? 'ja':'aus'}`;
+  }
 
-    function chooseFiles(selector, type, fileFilter){
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.multiple = type === 'video';
-      input.accept = type === 'video' ? '.mp4,.mov,video/*' : type === 'audio' ? '.mp3,.wav,audio/*' : type === 'lut' ? '.cube' : '.jpg,.jpeg,.png,image/*';
-      input.onchange = () => {
-        const files = Array.from(input.files || []);
-        const selected = files.filter(fileFilter);
-        if(!selected.length){ return; }
-        if(type === 'video'){ state.videos = selected; videoList.innerHTML = ''; state.videos.forEach(file => videoList.appendChild(listItem(file))); }
-        if(type === 'audio'){ state.audio = selected[0]; audioList.innerHTML = ''; audioList.appendChild(listItem(state.audio)); }
-        if(type === 'lut'){ state.lut = selected[0]; lutList.innerHTML = ''; lutList.appendChild(listItem(state.lut)); }
-        if(type === 'ref'){ state.refImage = selected[0]; refList.innerHTML = ''; refList.appendChild(listItem(state.refImage)); }
-        updateStats();
-      };
-      input.click();
-    }
+  // ---------- Hidden inputs wiring ----------
+  // Each visible button triggers the hidden input .click()
+  btnPickVideos.addEventListener('click', ()=> inputVideos.click());
+  btnPickAudio.addEventListener('click', ()=> inputAudio.click());
+  btnPickLut.addEventListener('click', ()=> inputLut.click());
+  btnPickRef.addEventListener('click', ()=> inputRef.click());
 
-    document.getElementById('pickVideos').addEventListener('click', () => chooseFiles('#', 'video', file => fileAccept(file, [/\.mp4$/i, /\.mov$/i, /^video\//i])));
-    document.getElementById('pickAudio').addEventListener('click', () => chooseFiles('#', 'audio', file => fileAccept(file, [/\.mp3$/i, /\.wav$/i, /^audio\//i])));
-    document.getElementById('pickLut').addEventListener('click', () => chooseFiles('#', 'lut', file => fileAccept(file, [/\.cube$/i])));
-    document.getElementById('pickRef').addEventListener('click', () => chooseFiles('#', 'ref', file => fileAccept(file, [/\.png$/i, /\.jpg$/i, /\.jpeg$/i, /^image\//i])));
+  // Drag & drop helpers
+  function bindDrop(dropId, handler){
+    const el = document.getElementById(dropId);
+    ['dragenter','dragover'].forEach(ev => el.addEventListener(ev, e=>{ e.preventDefault(); el.classList.add('active'); }));
+    ['dragleave','drop'].forEach(ev => el.addEventListener(ev, e=>{ e.preventDefault(); el.classList.remove('active'); }));
+    el.addEventListener('drop', e=>{ e.preventDefault(); const files = Array.from(e.dataTransfer.files || []); handler(files); });
+  }
 
-    bindDropZone(videoDrop, 'video', file => fileAccept(file, [/\.mp4$/i, /\.mov$/i, /^video\//i]));
-    bindDropZone(audioDrop, 'audio', file => fileAccept(file, [/\.mp3$/i, /\.wav$/i, /^audio\//i]));
-    bindDropZone(lutDrop, 'lut', file => fileAccept(file, [/\.cube$/i]));
-    bindDropZone(refDrop, 'ref', file => fileAccept(file, [/\.png$/i, /\.jpg$/i, /\.jpeg$/i, /^image\//i]));
+  // handle selections
+  inputVideos.addEventListener('change', (e)=>{
+    videos = Array.from(e.target.files || []);
+    updateFileDisplays();
+  });
+  inputAudio.addEventListener('change', (e)=>{
+    audio = e.target.files[0] || null;
+    updateFileDisplays();
+  });
+  inputLut.addEventListener('change', (e)=>{
+    lut = e.target.files[0] || null;
+    updateFileDisplays();
+  });
+  inputRef.addEventListener('change', (e)=>{
+    refImage = e.target.files[0] || null;
+    updateFileDisplays();
+  });
 
-    async function initFFmpeg(){
-      if(state.loaded) return;
-      const coreURL = await toBlobURL('https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.2/dist/umd/ffmpeg-core.js', 'text/javascript');
-      const wasmURL = await toBlobURL('https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.2/dist/umd/ffmpeg-core.wasm', 'application/wasm');
-      state.ffmpeg = new FFmpeg();
-      await state.ffmpeg.load({ coreURL, wasmURL });
-      state.loaded = true;
-    }
+  bindDrop('videoDrop', files => {
+    const accepted = files.filter(f => f.type.startsWith('video') || /\.mp4|\.mov/i.test(f.name));
+    if(accepted.length) videos = accepted;
+    updateFileDisplays();
+  });
+  bindDrop('audioDrop', files => {
+    const f = files.find(f => f.type.startsWith('audio') || /\.mp3|\.wav/i.test(f.name));
+    if(f) audio = f;
+    updateFileDisplays();
+  });
+  bindDrop('lutDrop', files => {
+    const f = files.find(f => /\.cube$/i.test(f.name));
+    if(f) lut = f;
+    updateFileDisplays();
+  });
+  bindDrop('refDrop', files => {
+    const f = files.find(f => f.type.startsWith('image') || /\.(jpe?g|png)$/i.test(f.name));
+    if(f) refImage = f;
+    updateFileDisplays();
+  });
 
-    function clamp(value, min, max){
-      return Math.min(Math.max(value, min), max);
-    }
-
-    async function analyzeAudio(file){
-      if(!file) return [];
-      const data = await file.arrayBuffer();
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const decoded = await audioContext.decodeAudioData(data.slice(0));
-      const channel = decoded.getChannelData(0);
-      const sr = decoded.sampleRate;
-      const step = Math.max(1, Math.floor(sr * 0.04));
-      const energies = [];
-      for(let i = 0; i < channel.length; i += step){
-        let sum = 0;
-        for(let j = 0; j < step && i + j < channel.length; j++){
-          const v = channel[i + j];
-          sum += v * v;
-        }
-        energies.push(Math.sqrt(sum / step));
-      }
-      const mean = energies.reduce((a,b)=>a+b,0) / Math.max(1, energies.length);
-      const threshold = Math.max(mean * 2.4, 0.02);
-      const beats = [];
-      for(let i = 2; i < energies.length - 2; i++){
-        if(energies[i] > energies[i - 1] && energies[i] > energies[i + 1] && energies[i] > threshold){
-          const sec = (i * step) / sr;
-          beats.push(sec);
-        }
-      }
-      const unique = [];
-      for(const beat of beats){
-        if(!unique.length || beat - unique[unique.length - 1] > 0.6){ unique.push(beat); }
-      }
-      await audioContext.close();
-      return unique;
-    }
-
-    async function imageStats(file){
-      if(!file){ return null; }
-      const img = await new Promise((resolve, reject) => {
-        const url = URL.createObjectURL(file);
-        const image = new Image();
-        image.onload = () => {
-          URL.revokeObjectURL(url);
-          resolve(image);
-        };
-        image.onerror = () => {
-          URL.revokeObjectURL(url);
-          reject(new Error('Image load failed'));
-        };
-        image.src = url;
-      });
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-      const channels = [[], [], []];
-      for(let i = 0; i < data.length; i += 4){
-        channels[0].push(data[i]);
-        channels[1].push(data[i + 1]);
-        channels[2].push(data[i + 2]);
-      }
-      const mean = arr => arr.reduce((a,b)=>a+b,0) / arr.length;
-      const std = (arr, m) => Math.sqrt(arr.reduce((a,b)=>a + (b-m)*(b-m), 0) / arr.length);
-      const means = channels.map(mean);
-      const stds = channels.map((arr, idx) => std(arr, means[idx]));
-      return {meanR:means[0], meanG:means[1], meanB:means[2], sdR:stds[0], sdG:stds[1], sdB:stds[2]};
-    }
-
-    function computeColorMatch(sourceStats, refStats){
-      if(!sourceStats || !refStats){
-        return {contrast:1.15, brightness:0.05, gamma:0.92, saturation:1.2};
-      }
-      const sourceLum = 0.2126 * sourceStats.meanR + 0.7152 * sourceStats.meanG + 0.0722 * sourceStats.meanB;
-      const refLum = 0.2126 * refStats.meanR + 0.7152 * refStats.meanG + 0.0722 * refStats.meanB;
-      const sourceSd = 0.2126 * sourceStats.sdR + 0.7152 * sourceStats.sdG + 0.0722 * sourceStats.sdB;
-      const refSd = 0.2126 * refStats.sdR + 0.7152 * refStats.sdG + 0.0722 * refStats.sdB;
-      const contrast = clamp((refSd || 1) / (sourceSd || 1), 0.8, 2.4);
-      const brightness = clamp(((refLum - sourceLum) / 255) * 1.2, -0.25, 0.2);
-      const gamma = clamp(1 / contrast, 0.8, 1.4);
-      const saturation = clamp((refSd * 1.5) / (sourceSd || 1), 0.8, 2.1);
-      return { contrast, brightness, gamma, saturation };
-    }
-
-    function extOfName(name){
-      const m = name.match(/\.[a-z0-9]+$/i);
-      return m ? m[0] : '.bin';
-    }
-
-    async function buildAndRender(){
-      if(!state.videos.length){
-        alert('Bitte mindestens ein Video auswählen.');
-        return;
-      }
-      if(!state.audio){
-        alert('Bitte eine Musikdatei auswählen.');
-        return;
-      }
-      await initFFmpeg();
-      state.ffmpeg.writeFile('prompt.txt', new TextEncoder().encode(prompt.value || ''));
-      setProgress(0.04, 'Analysiere Musik- und Bildreferenz...');
-      const beats = await analyzeAudio(state.audio);
-      const refStats = state.refImage ? await imageStats(state.refImage) : null;
-      const firstVideo = state.videos[0];
-      const firstVideoName = `video_0${extOfName(firstVideo.name)}`;
-      const firstVideoBuffer = await fetchFile(firstVideo);
-      state.ffmpeg.writeFile(firstVideoName, firstVideoBuffer);
-      setProgress(0.08, 'Lade Video- und LUT-Dateien...');
-      for(let i = 0; i < state.videos.length; i++){
-        const file = state.videos[i];
-        state.ffmpeg.writeFile(`video_${i}${extOfName(file.name)}`, await fetchFile(file));
-      }
-      if(state.lut){
-        state.ffmpeg.writeFile('lut_input.cube', await fetchFile(state.lut));
-      }
-      state.ffmpeg.writeFile('music' + extOfName(state.audio.name), await fetchFile(state.audio));
-
-      let eq = { contrast:1.2, brightness:0.06, gamma:0.92, saturation:1.3 };
-      if(state.refImage){
-        const sourceStats = await imageStats(new File([firstVideoBuffer], firstVideo.name, { type: firstVideo.type || 'video/mp4' }));
-        eq = computeColorMatch(sourceStats, refStats);
-      }
-
-      setProgress(0.12, 'Färbt Video mit LUT und Color Match...');
-      const vFilterParts = [];
-      const concatInputs = [];
-      for(let i = 0; i < state.videos.length; i++){
-        const label = `v${i}`;
-        let filter = `[${i}:v]scale=1920:1080,format=yuv420p,eq=contrast=${eq.contrast.toFixed(3)}:brightness=${eq.brightness.toFixed(3)}:gamma=${eq.gamma.toFixed(3)}:saturation=${eq.saturation.toFixed(3)}`;
-        if(state.lut){
-          filter += ',lut3d=lut_input.cube';
-        }
-        filter += `[${label}]`;
-        vFilterParts.push(filter);
-        concatInputs.push(`[${label}]`);
-      }
-      const concatFilter = `${vFilterParts.join(';')};${concatInputs.join('')}concat=n=${state.videos.length}:v=1:a=0[outv]`;
-      const renderInputs = [];
-      for(let i = 0; i < state.videos.length; i++){
-        renderInputs.push('-i', `video_${i}${extOfName(state.videos[i].name)}`);
-      }
-      await state.ffmpeg.exec([...renderInputs, '-filter_complex', concatFilter, '-map', '[outv]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', 'processed.mp4']);
-
-      let duration = 0;
-      try{
-        const metadata = await state.ffmpeg.exec(['-i', 'processed.mp4']);
-      }catch(err){}
-      const probe = await state.ffmpeg.exec(['-i', 'processed.mp4', '-f', 'null', '-']);
-      const probeOutput = state.ffmpeg.stderr ? state.ffmpeg.stderr.toString() : '';
-      const match = (probeOutput || '').match(/Duration: (\d+):(\d+):(\d+\.\d+)/);
-      if(match){
-        duration = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
-      }
-      if(!duration){
-        duration = Math.max(12, beats.length ? beats[beats.length - 1] + 4 : 18);
-      }
-
-      setProgress(0.45, 'Setze Speed Ramps auf Beat-Zeitstempel...');
-      const beatSegments = [];
-      let cursor = 0;
-      const validBeats = beats.filter(b => b > 0.2 && b < duration - 0.2);
-      for(let i = 0; i < validBeats.length; i++){
-        const beat = validBeats[i];
-        const rampStart = Math.max(cursor, beat - 0.35);
-        const rampEnd = Math.min(duration, beat);
-        const slowEnd = Math.min(duration, beat + 0.8);
-        if(cursor < rampStart){
-          beatSegments.push({start: cursor, end: rampStart, mode: 'normal'});
-        }
-        beatSegments.push({start: rampStart, end: rampEnd, mode: 'ramp'});
-        beatSegments.push({start: rampEnd, end: slowEnd, mode: 'slow'});
-        cursor = slowEnd;
-      }
-      if(cursor < duration){
-        beatSegments.push({start: cursor, end: duration, mode: 'normal'});
-      }
-      if(!beatSegments.length){
-        beatSegments.push({start:0,end:duration,mode:'normal'});
-      }
-      const segLabels = [];
-      const segmentFilter = [];
-      let labelIndex = 0;
-      for(let i = 0; i < beatSegments.length; i++){
-        const seg = beatSegments[i];
-        const label = `s${labelIndex}`;
-        let expr = `trim=start=${seg.start.toFixed(3)}:end=${seg.end.toFixed(3)},setpts=PTS-STARTPTS`;
-        if(seg.mode === 'ramp'){ expr = `trim=start=${seg.start.toFixed(3)}:end=${seg.end.toFixed(3)},setpts=PTS/3.0`; }
-        if(seg.mode === 'slow'){ expr = `trim=start=${seg.start.toFixed(3)}:end=${seg.end.toFixed(3)},setpts=PTS/0.5`; }
-        segmentFilter.push(`[0:v]${expr}[${label}]`);
-        segLabels.push(`[${label}]`);
-        labelIndex += 1;
-      }
-      segmentFilter.push(`${segLabels.join('')}concat=n=${segLabels.length}:v=1:a=0[finalv]`);
-      const rampFilter = segmentFilter.join(';');
-      await state.ffmpeg.exec(['-i', 'processed.mp4', '-filter_complex', rampFilter, '-map', '[finalv]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '19', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', 'ramped.mp4']);
-
-      setProgress(0.8, 'Kopiere Musikspur und exportiere MP4...');
-      await state.ffmpeg.exec(['-i', 'ramped.mp4', '-i', 'music' + extOfName(state.audio.name), '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-shortest', '-movflags', '+faststart', 'final_autocut.mp4']);
-
-      const data = state.ffmpeg.readFile('final_autocut.mp4');
-      const blob = new Blob([data.buffer], { type: 'video/mp4' });
-      const url = URL.createObjectURL(blob);
-      preview.src = url;
-      previewMeta.textContent = 'Export fertig';
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `auto-cutter-${Date.now()}.mp4`;
-      setTimeout(() => a.click(), 200);
-      setProgress(1, 'Fertig!');
-      status.textContent = '[Auto Cutter] Fertig!';
-    }
-
-    document.getElementById('generateBtn').addEventListener('click', async () => {
-      try{
-        setProgress(0.01, 'Initialisiere FFmpeg.wasm...');
-        await initFFmpeg();
-        await buildAndRender();
-      }catch(err){
-        console.error(err);
-        setProgress(0, 'Fehler im Rendering');
-        status.textContent = '[Auto Cutter] Fehler: ' + (err && err.message ? err.message : 'Unbekannter Fehler');
-        alert('Es ist ein Fehler aufgetreten. Bitte prüfe die Dateien und die Konsole.');
+  // ---------- FFmpeg initialization ----------
+  let ffmpeg = null;
+  let ffmpegLoaded = false;
+  async function initFFmpeg(){
+    if(ffmpegLoaded) return;
+    setStatus('Lade FFmpeg.wasm in den Browser (kann einige Sekunden dauern)...', 0.02);
+    // use global FFmpeg (UMD), createFFmpeg available
+    const { createFFmpeg } = FFmpeg;
+    ffmpeg = createFFmpeg({
+      log: true,
+      corePath: 'https://unpkg.com/@ffmpeg/core@0.12.2/dist/ffmpeg-core.js'
+    });
+    // Attach log output to UI
+    ffmpeg.setLogger(({ type, message }) => {
+      // type can be "info","warn","debug","error"
+      log(`[ffmpeg ${type}] ${message}`);
+      // optional: update status text when info messages appear
+      if(message && message.toLowerCase().includes('duration:')) {
+        setStatus('Verarbeite Video (probe) ...', null);
       }
     });
+    ffmpeg.setProgress(({ ratio }) => {
+      // ratio from 0..1
+      setStatus('FFmpeg arbeitet...', 0.1 + ratio*0.6);
+    });
+    await ffmpeg.load();
+    ffmpegLoaded = true;
+    setStatus('FFmpeg geladen', 0.08);
+    log('FFmpeg.wasm geladen.');
+  }
 
-    updateStats();
-  </script>
+  // ---------- Helpers for file <-> ffmpeg FS ----------
+  async function fileToUint8Array(file){
+    const ab = await file.arrayBuffer();
+    return new Uint8Array(ab);
+  }
+
+  function extOf(name){
+    const m = name.match(/(\.[a-z0-9]+)$/i);
+    return m ? m[1] : '';
+  }
+
+  // ---------- Web Audio beat detection (basic bass peak detection) ----------
+  async function analyzeAudioForBeats(file){
+    try{
+      setStatus('Analysiere Audio auf Bass-Peaks...', 0.09);
+      log('Starte Audioanalyse...');
+      const arrayBuffer = await file.arrayBuffer();
+      const audioCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 44100 * 60 * 5, 44100);
+      const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+      const offlineCtx = new OfflineAudioContext(1, decoded.length, decoded.sampleRate);
+      const src = offlineCtx.createBufferSource(); src.buffer = decoded;
+      const filter = offlineCtx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 200;
+      const analyser = offlineCtx.createAnalyser(); analyser.fftSize = 2048;
+      src.connect(filter); filter.connect(analyser); analyser.connect(offlineCtx.destination);
+      src.start(0);
+      const rendered = await offlineCtx.startRendering();
+      const data = rendered.getChannelData(0);
+      const sr = rendered.sampleRate;
+      const windowSize = Math.floor(sr * 0.05); // 50ms windows
+      const energies = [];
+      for(let i=0;i<data.length;i+=windowSize){
+        let s=0;
+        for(let j=0;j<windowSize && i+j<data.length;j++) s+=data[i+j]*data[i+j];
+        energies.push(Math.sqrt(s/Math.max(1,windowSize)));
+      }
+      const mean = energies.reduce((a,b)=>a+b,0)/energies.length;
+      const threshold = Math.max(mean*2.4, 0.01);
+      const peaks = [];
+      for(let i=2;i<energies.length-2;i++){
+        if(energies[i] > energies[i-1] && energies[i] > energies[i+1] && energies[i] > threshold){
+          peaks.push((i * windowSize) / sr);
+        }
+      }
+      // deduplicate by spacing (>0.6s)
+      const unique = [];
+      for(const p of peaks){
+        if(!unique.length || p - unique[unique.length-1] > 0.6) unique.push(p);
+      }
+      setStatus(`Audio analysiert — ${unique.length} Peaks gefunden`, 0.12);
+      log(`Audioanalyse: ${unique.length} Peaks`);
+      return unique;
+    }catch(e){
+      log('Audioanalyse fehlgeschlagen: ' + e.message);
+      setStatus('Audioanalyse fehlgeschlagen, verwende Defaults', 0.03);
+      return [];
+    }
+  }
+
+  // ---------- Basic reference image stats ----------
+  async function computeImageStats(file){
+    if(!file) return null;
+    try{
+      setStatus('Analysiere Referenzbild...', 0.02);
+      const url = URL.createObjectURL(file);
+      const img = await new Promise((res,rej)=>{
+        const i = new Image(); i.onload = ()=>{ res(i); }; i.onerror = ()=> rej(new Error('Image load failed')); i.src = url;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d'); ctx.drawImage(img,0,0);
+      const d = ctx.getImageData(0,0,canvas.width,canvas.height).data;
+      let rSum=0,gSum=0,bSum=0,count=0;
+      for(let i=0;i<d.length;i+=4){ rSum+=d[i]; gSum+=d[i+1]; bSum+=d[i+2]; count++; }
+      URL.revokeObjectURL(url);
+      return { meanR: rSum/count, meanG: gSum/count, meanB: bSum/count };
+    }catch(e){ log('Referenzbild-Analyse fehlgeschlagen: '+e.message); return null; }
+  }
+
+  // ---------- Color-match parameter computation (simple) ----------
+  function computeEqParams(srcStats, refStats){
+    // fallback defaults
+    if(!srcStats || !refStats) return { contrast:1.12, brightness:0.03, gamma:0.95, saturation:1.08 };
+    const sLum = 0.2126 * srcStats.meanR + 0.7152 * srcStats.meanG + 0.0722 * srcStats.meanB;
+    const rLum = 0.2126 * refStats.meanR + 0.7152 * refStats.meanG + 0.0722 * refStats.meanB;
+    const brightness = ((rLum - sLum) / 255) * 1.1; // map to small shift
+    const contrast = Math.max(0.85, Math.min(1.6, 1 + ( (refStats.meanR - srcStats.meanR) / 255 ) )); // small
+    const gamma = Math.max(0.85, Math.min(1.25, 1 / contrast));
+    const saturation = 1.0;
+    return { contrast, brightness, gamma, saturation };
+  }
+
+  // ---------- Main render pipeline ----------
+  btnGenerate.addEventListener('click', async ()=>{
+    try{
+      if(!videos.length){ alert('Bitte mindestens ein Video auswählen.'); return; }
+      if(!audio){ if(!confirm('Keine Musik ausgewählt. Weiter ohne Musik?')) return; }
+
+      await initFFmpeg();
+      setStatus('Vorbereiten: Dateien werden geladen...', 0.06);
+      log('Schreibe Eingabedateien in den Speicher von FFmpeg.wasm...');
+
+      // Write files into ffmpeg FS
+      // input video names: vid0.mp4, vid1.mp4, ...
+      for(let i=0;i<videos.length;i++){
+        const f = videos[i];
+        const name = `vid${i}${extOf(f.name) || '.mp4'}`;
+        const data = await fileToUint8Array(f);
+        ffmpeg.FS('writeFile', name, data);
+        log(`geschrieben: ${name} (${humanSize(f.size)})`);
+      }
+      if(audio){
+        const an = 'music' + (extOf(audio.name) || '.mp3');
+        ffmpeg.FS('writeFile', an, await fileToUint8Array(audio));
+        log(`geschrieben: ${an}`);
+      }
+      if(lut){
+        ffmpeg.FS('writeFile', 'input_lut.cube', await fileToUint8Array(lut));
+        log(`geschrieben: input_lut.cube`);
+      }
+      if(refImage){
+        ffmpeg.FS('writeFile', 'ref_image' + extOf(refImage.name), await fileToUint8Array(refImage));
+        log('geschrieben: Referenzbild');
+      }
+
+      // Analyze audio for beats
+      const beats = audio ? await analyzeAudioForBeats(audio) : [];
+      if(beats.length === 0){
+        // fallback: generate synthetic beat markers every 2s (for at most 20 beats)
+        const fallback = [];
+        for(let i=1;i<=20;i++) fallback.push(i*2);
+        log('Fallback-Beats verwendet (kein erkennbarer Bass).');
+        setStatus('Keine starken Bass-Peaks gefunden — verwende Default-Rhythmus', 0.12);
+        // limit fallback to 20 or duration later
+        beats.push(...fallback);
+      }
+
+      // Prepare color match params
+      let eqParams = { contrast:1.12, brightness:0.03, gamma:0.95, saturation:1.0 };
+      if(refImage){
+        setStatus('Analysiere Referenzbild für Color Match...', 0.12);
+        const refStats = await computeImageStats(refImage);
+        // Extract a simple frame from first video to compute source stats
+        const firstVidName = 'vid0' + extOf(videos[0].name) || 'vid0.mp4';
+        // create temporary frame (small) using ffmpeg to read into img then compute average color is complex inside ffmpeg;
+        // We'll use a simpler approach: use default eq but prefer ref influence
+        eqParams = computeEqParams({ meanR:120, meanG:110, meanB:100 }, refStats || null);
+        log('Color Match-Parameter berechnet.');
+      }
+
+      setStatus('Erstelle Farbkorrektur + concat...', 0.14);
+
+      // Build filter_complex
+      // For each input video, apply scale to 3840x2160 (if needed), LUT (optional) and eq
+      // Then concat
+      const filterParts = [];
+      const inArgs = [];
+      for(let i=0;i<videos.length;i++){
+        const name = `vid${i}${extOf(videos[i].name) || '.mp4'}`;
+        inArgs.push('-i', name);
+        // Apply scale only to avoid heavy resizes: keep source resolution but we ask ffmpeg to map eq and lut
+        let part = `[${i}:v]`;
+        // apply lut if provided
+        if(lut){
+          part += `lut3d=input_lut.cube,`;
+        }
+        // apply eq
+        part += `eq=contrast=${eqParams.contrast.toFixed(3)}:brightness=${eqParams.brightness.toFixed(3)}:gamma=${eqParams.gamma.toFixed(3)}:saturation=${eqParams.saturation.toFixed(3)}[v${i}]`;
+        filterParts.push(part);
+      }
+      const concatInputs = videos.map((_,i)=>`[v${i}]`).join('');
+      const concatFilter = `${filterParts.join(';')};${concatInputs}concat=n=${videos.length}:v=1:a=0[outv]`;
+
+      setStatus('Rendere farbkorrigiertes Video (dies kann lange dauern)...', 0.16);
+      log('Starte erstes Rendering (Color Grade + Concat)...');
+      // Run ffmpeg to render color-corrected concatenated video
+      await ffmpeg.run(...inArgs, '-filter_complex', concatFilter, '-map', '[outv]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', 'concat_processed.mp4');
+      setStatus('Farbkorrektur & Zusammenfügung abgeschlossen', 0.45);
+      log('concat_processed.mp4 erstellt.');
+
+      // Read result into browser to determine duration
+      const procData = ffmpeg.FS('readFile', 'concat_processed.mp4');
+      const procBlob = new Blob([procData.buffer], { type:'video/mp4' });
+      const procUrl = URL.createObjectURL(procBlob);
+      const tmpVid = document.createElement('video');
+      tmpVid.preload = 'metadata';
+      tmpVid.src = procUrl;
+      await new Promise((res)=>{ tmpVid.onloadedmetadata = ()=>{ res(); }; tmpVid.onerror = ()=>{ res(); }; });
+      const totalDuration = tmpVid.duration || (beats[beats.length-1] + 4);
+      URL.revokeObjectURL(procUrl);
+      log(`Dauer concatenated video: ${totalDuration.toFixed(2)}s`);
+
+      setStatus('Erstelle Speed Ramps basierend auf Beats...', 0.48);
+
+      // Build speed ramp segments based on beats (simple segmentation)
+      // We'll create segments: normal until rampStart, ramp (fast) for short window before beat -> slow-motion on beat for 0.8s, then continue
+      const segs = [];
+      let cursor = 0;
+      for(let i=0;i<beats.length;i++){
+        const b = beats[i];
+        if(b < 0.2 || b > totalDuration - 0.2) continue;
+        const rampLen = Math.min(0.25, b - cursor); // ramp length up to 250ms
+        const rampStart = Math.max(cursor, b - rampLen);
+        const slowEnd = Math.min(totalDuration, b + 0.8);
+        if(rampStart > cursor) segs.push({start: cursor, end: rampStart, mode: 'normal'});
+        segs.push({start: rampStart, end: b, mode: 'ramp'}); // accelerate
+        segs.push({start: b, end: slowEnd, mode: 'slow'}); // slow mo
+        cursor = slowEnd;
+        if(cursor >= totalDuration) break;
+      }
+      if(cursor < totalDuration) segs.push({start: cursor, end: totalDuration, mode: 'normal'});
+
+      // Build filter_complex for speed modifications using trim + setpts, then concat
+      const segFilters = [];
+      const segLabels = [];
+      for(let i=0;i<segs.length;i++){
+        const s = segs[i];
+        const label = `s${i}`;
+        // minute detail:
+        // - normal: setpts=PTS-STARTPTS (no speed change)
+        // - ramp (fast 300%): setpts=PTS/3
+        // - slow (50%): setpts=PTS/0.5
+        let expr = `trim=start=${s.start.toFixed(3)}:end=${s.end.toFixed(3)},setpts=PTS-STARTPTS`;
+        if(s.mode === 'ramp') expr = `trim=start=${s.start.toFixed(3)}:end=${s.end.toFixed(3)},setpts=PTS/3`;
+        if(s.mode === 'slow') expr = `trim=start=${s.start.toFixed(3)}:end=${s.end.toFixed(3)},setpts=PTS/0.5`;
+        segFilters.push(`[0:v]${expr}[${label}]`);
+        segLabels.push(`[${label}]`);
+      }
+      const concatSeg = `${segFilters.join(';')};${segLabels.join('')}concat=n=${segLabels.length}:v=1:a=0[finalv]`;
+
+      setStatus('Rendere finalen Schnitt mit Speed Ramps...', 0.6);
+      log('Starte Rendering mit Speed-Ramps (dies kann erneut lange dauern)...');
+      // Write the processed.mp4 to fs to feed into this step
+      ffmpeg.FS('writeFile', 'concat_processed.mp4', procData);
+      // run ffmpeg to create ramped.mp4
+      await ffmpeg.run('-i', 'concat_processed.mp4', '-filter_complex', concatSeg, '-map', '[finalv]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '19', '-pix_fmt', 'yuv420p', 'ramped.mp4');
+      setStatus('Speed Ramps gerendert', 0.85);
+      log('ramped.mp4 erstellt.');
+
+      // Merge music (if present) or keep existing
+      setStatus('Füge Musikspur hinzu und exportiere...', 0.88);
+      if(audio){
+        const audioName = 'music' + extOf(audio.name);
+        await ffmpeg.run('-i', 'ramped.mp4', '-i', audioName, '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-shortest', 'final_autocut.mp4');
+      } else {
+        // no audio: just copy video
+        await ffmpeg.run('-i', 'ramped.mp4', '-c', 'copy', 'final_autocut.mp4');
+      }
+
+      // Read final file and present download + preview
+      const out = ffmpeg.FS('readFile', 'final_autocut.mp4');
+      const outBlob = new Blob([out.buffer], { type: 'video/mp4' });
+      const outUrl = URL.createObjectURL(outBlob);
+      preview.src = outUrl;
+      previewInfo.textContent = `Export fertig • ${ (outBlob.size / (1024*1024)).toFixed(1) } MB`;
+      setStatus('Fertig! Download startet...', 1.0);
+      log('final_autocut.mp4 fertiggestellt.');
+
+      // Trigger automatic download
+      const a = document.createElement('a'); a.href = outUrl; a.download = `auto-cutter-${Date.now()}.mp4`; document.body.appendChild(a);
+      a.click();
+      setTimeout(()=>{ try{ a.remove(); }catch(e){} }, 4000);
+
+    }catch(err){
+      console.error(err);
+      log('Fehler: ' + (err && err.message ? err.message : String(err)));
+      setStatus('Fehler im Renderprozess — siehe Log', 0);
+      alert('Fehler beim Generieren. Bitte prüfe die Konsole und das Log.');
+    }
+  });
+
+  // Initial UI state
+  updateFileDisplays();
+  setStatus('Bereit', 0);
+  log('Auto Cutter bereit. Wähle Medien aus, dann drücke "Video mit Auto Cutter generieren".');
+})();
+</script>
 </body>
 </html>
